@@ -47,6 +47,13 @@ export class NumberStore implements PropertyStore {
         this.value = getDefaultNumberValue(schema) ?? 0;
       }
       this.editString = typeof this.value === 'number' ? formatEditString(schema, this.value) : '';
+    } else if (typeof initialValue === 'string' && initialValue !== '' && !Number.isNaN(Number(initialValue))) {
+      // Config values may arrive as numeric strings (e.g. wb-mqtt-serial enum stored as ["0", "1"]).
+      // Coerce them to numbers instead of flagging them as mistyped, the same way setValue() does,
+      // otherwise valid numeric-string values are wrapped in MistypedValue and dropped on save.
+      const parsedValue = Number(initialValue);
+      this.value = parsedValue;
+      this.editString = formatEditString(schema, parsedValue);
     } else {
       this.value = new MistypedValue(initialValue);
       this.editString = '';
