@@ -41,6 +41,11 @@ from .http_response import (
     response_429,
     response_500,
 )
+from .extensions import (
+    ExtensionRegistry,
+    extension_proxy_handler,
+    extensions_manifest_handler,
+)
 from .rate_limiter import RateLimiter
 from .security import SecurityCheckingThread
 from .sessions_storage import Session, SessionsStorage
@@ -177,13 +182,14 @@ def validate_update_user_request(request: dict) -> None:
 
 
 @dataclass
-class WebRequestHandlerContext:
+class WebRequestHandlerContext:  # pylint: disable=too-many-instance-attributes
     sn: str
     users_storage: UsersStorage
     sessions_storage: SessionsStorage
     certificate_thread: CertificateCheckingThread
     security_check_thread: SecurityCheckingThread
     dashboards_store: DashboardsStore
+    extension_registry: Optional[ExtensionRegistry] = None
     session: Optional[Session] = None
 
 
@@ -659,6 +665,21 @@ def security_check_handler(
     return response_200([["Content-type", "text/plain"]], "OK")
 
 
+def extensions_handler(_request: BaseHTTPRequestHandler, context: WebRequestHandlerContext) -> HttpResponse:
+    return extensions_manifest_handler(_request, context.extension_registry or ExtensionRegistry(()))
+
+
+def extensions_api_handler(
+    request: BaseHTTPRequestHandler, context: WebRequestHandlerContext
+) -> HttpResponse:
+    return extension_proxy_handler(
+        request,
+        context.extension_registry or ExtensionRegistry(()),
+        context.session,
+        context.users_storage.has_users(),
+    )
+
+
 def custom_menu_handler(_request: BaseHTTPRequestHandler, _context: WebRequestHandlerContext) -> HttpResponse:
     menu_items = []
     for menu_dir in CUSTOM_MENU_DIRS:
@@ -684,6 +705,13 @@ def find_handler(url: str, handlers: dict[str, RequestHandler]) -> Optional[Requ
     url_components = urlparse(url).path.split("/")
     for pattern, handler in handlers.items():
         pattern_components = pattern.split("/")
+        if pattern_components[-1] == "**":
+            if len(url_components) >= len(pattern_components):
+                fixed_pattern = pattern_components[:-1]
+                fixed_url = url_components[: len(fixed_pattern)]
+                if all(pat in ("*", comp) for pat, comp in zip(fixed_pattern, fixed_url)):
+                    return handler
+            continue
         if len(url_components) == len(pattern_components):
             i = 0
             while pattern_components[i] == "*" or pattern_components[i] == url_components[i]:
@@ -703,6 +731,7 @@ class WebRequestHandler(BaseHTTPRequestHandler):
     rate_limiter: RateLimiter
     config: Config
     dashboards_store: DashboardsStore
+    extension_registry: ExtensionRegistry
 
     def process_response(self, response: HttpResponse) -> None:
         if 200 <= response.status < 300 or response.status == 304:
@@ -739,6 +768,7 @@ class WebRequestHandler(BaseHTTPRequestHandler):
                 self.certificate_thread,
                 self.security_check_thread,
                 self.dashboards_store,
+                self.extension_registry,
                 session,
             ),
         )
@@ -761,6 +791,8 @@ class WebRequestHandler(BaseHTTPRequestHandler):
                 "/api/https": RequestHandler(fn=get_https_handler),
                 "/api/dashboards": RequestHandler(fn=get_dashboards_handler),
                 "/api/dashboards/*/svg": RequestHandler(fn=get_dashboard_svg_handler),
+                "/api/extensions": RequestHandler(fn=extensions_handler),
+                "/api/extensions/*/**": RequestHandler(fn=extensions_api_handler),
                 "/ui/menu": RequestHandler(fn=custom_menu_handler),
             }
         )
@@ -772,6 +804,7 @@ class WebRequestHandler(BaseHTTPRequestHandler):
                 "/auth/login": RequestHandler(fn=auth_login_handler, rate_per_minute_limit=30),
                 "/auth/logout": RequestHandler(fn=auth_logout_handler),
                 "/api/https/request_cert": RequestHandler(fn=https_request_cert_handler),
+                "/api/extensions/*/**": RequestHandler(fn=extensions_api_handler),
             }
         )
 
@@ -781,6 +814,7 @@ class WebRequestHandler(BaseHTTPRequestHandler):
                 "/users/*": RequestHandler(fn=update_user_handler),
                 "/api/https": RequestHandler(fn=update_https_handler),
                 "/api/dashboards/*": RequestHandler(fn=patch_dashboard_handler),
+                "/api/extensions/*/**": RequestHandler(fn=extensions_api_handler),
             }
         )
 
@@ -789,6 +823,7 @@ class WebRequestHandler(BaseHTTPRequestHandler):
             {
                 "/api/dashboards": RequestHandler(fn=update_dashboards_handler),
                 "/api/dashboards/*": RequestHandler(fn=put_dashboard_handler),
+                "/api/extensions/*/**": RequestHandler(fn=extensions_api_handler),
             }
         )
 
@@ -797,6 +832,7 @@ class WebRequestHandler(BaseHTTPRequestHandler):
             {
                 "/users/*": RequestHandler(fn=delete_user_handler),
                 "/api/dashboards/*": RequestHandler(fn=delete_dashboard_handler),
+                "/api/extensions/*/**": RequestHandler(fn=extensions_api_handler),
             }
         )
 
@@ -856,6 +892,7 @@ def main():
     WebRequestHandler.security_check_thread = SecurityCheckingThread(sn)
     WebRequestHandler.rate_limiter = RateLimiter()
     WebRequestHandler.dashboards_store = DashboardsStore()
+    WebRequestHandler.extension_registry = ExtensionRegistry.load()
 
     try:
         WebRequestHandler.dashboards_store.seed_and_reconcile(detect_board())

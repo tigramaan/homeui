@@ -1,4 +1,4 @@
-import { getMenu } from './api';
+import { getExtensionMenuItems, getMenu } from './api';
 import { normalizeMenuResponse, toMenuItemInstance, mergeMenuItems } from './menu-items';
 import UiStore from './ui-store';
 
@@ -8,7 +8,10 @@ vi.mock('@/stores/auth', () => ({
   UserRole: { User: 'user', Operator: 'operator', Admin: 'admin' },
 }));
 vi.mock('@/stores/dashboards', () => ({ dashboardsStore: {} }));
-vi.mock('./api', () => ({ getMenu: vi.fn(() => Promise.resolve([])) }));
+vi.mock('./api', () => ({
+  getMenu: vi.fn(() => Promise.resolve([])),
+  getExtensionMenuItems: vi.fn(() => Promise.resolve([])),
+}));
 vi.mock('@/router/legacy-redirects', () => ({
   migrateLegacyUrl: vi.fn((url: string) => url),
 }));
@@ -31,6 +34,7 @@ describe('UiStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getItemMock.mockReturnValue(null);
+    vi.mocked(getExtensionMenuItems).mockResolvedValue([]);
     store = new UiStore();
   });
 
@@ -90,6 +94,7 @@ describe('UiStore', () => {
       await store.buildMenu([], false, new URLSearchParams());
 
       expect(getMenu).toHaveBeenCalledTimes(1);
+      expect(getExtensionMenuItems).toHaveBeenCalledTimes(1);
     });
 
     test('collects module ids from custom items with children', async () => {

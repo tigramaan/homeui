@@ -1,4 +1,7 @@
 {
+  "extensions": {
+    "load-error": "Не удалось загрузить страницу расширения"
+  },
    "common":{
       "labels": {
          "loading": "Загрузка",

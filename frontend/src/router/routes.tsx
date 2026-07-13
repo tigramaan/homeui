@@ -1,5 +1,6 @@
 import { lazy } from 'react';
 import { redirect, type RouteObject } from 'react-router-dom';
+import { ExtensionPage, extensionLoader } from '@/extensions/extension-page';
 import { DefaultLayout } from '@/layouts/default';
 import { legacyParamRedirects, legacyStaticRedirects } from './legacy-redirects';
 import { authGuard, homeRedirect } from './middlewares';
@@ -82,6 +83,11 @@ export const routes: RouteObject[] = [
           {
             path: 'alice',
             element: <AlicePage />,
+          },
+          {
+            path: '*',
+            element: <ExtensionPage />,
+            loader: extensionLoader,
           },
         ],
       },

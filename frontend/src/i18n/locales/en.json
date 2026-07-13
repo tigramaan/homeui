@@ -1,4 +1,7 @@
 {
+  "extensions": {
+    "load-error": "Extension page failed to load"
+  },
    "common":{
       "labels": {
          "loading": "Loading",

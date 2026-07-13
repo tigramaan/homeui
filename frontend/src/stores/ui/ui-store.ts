@@ -2,7 +2,7 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import i18n from '@/i18n/config';
 import { authStore } from '@/stores/auth';
 import type { Dashboard } from '@/stores/dashboards';
-import { getMenu } from './api';
+import { getExtensionMenuItems, getMenu } from './api';
 import { getMenuItems, mergeMenuItems, normalizeMenuResponse, toMenuItemInstance } from './menu-items';
 import type { CustomMenuItem, MenuItemInstance } from './types';
 
@@ -53,8 +53,14 @@ export default class UiStore {
 
   async #getCustomMenuItems() {
     if (!this.#additionalItems) {
-      const additionalItems = await getMenu();
-      this.#additionalItems = normalizeMenuResponse(additionalItems);
+      const [additionalItems, extensionItems] = await Promise.all([getMenu(), getExtensionMenuItems()]);
+      this.#additionalItems = normalizeMenuResponse([
+        ...additionalItems,
+        {
+          id: 'integrations',
+          children: extensionItems,
+        },
+      ]);
     }
     runInAction(() => {
       this.modules = this.#collectModuleIds(this.#additionalItems);
