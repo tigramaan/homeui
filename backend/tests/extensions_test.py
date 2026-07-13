@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import socket
 import tempfile
 import unittest
@@ -9,6 +10,7 @@ from unittest.mock import MagicMock, patch
 from wb.homeui_backend.extensions import (
     MAX_REQUEST_BODY,
     ExtensionRegistry,
+    extension_asset_handler,
     extension_proxy_handler,
     get_extension_path,
     validate_manifest,
@@ -96,6 +98,102 @@ class ExtensionManifestValidationTest(unittest.TestCase):
                 json.dump(manifest(), fp)
             registry = ExtensionRegistry.load((temp_dir,))
         self.assertEqual(json.loads(registry.public_json()), [])
+
+
+class ExtensionAssetHandlerTest(unittest.TestCase):
+    def request(self, path="/extensions/umec/entry.js"):
+        req = MagicMock()
+        req.path = path
+        return req
+
+    def registry(self, **overrides):
+        return ExtensionRegistry((validate_manifest(manifest(**overrides)),))
+
+    def test_serves_registered_entry_from_trusted_asset_dir(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.makedirs(f"{temp_dir}/umec")
+            with open(f"{temp_dir}/umec/entry.js", "w", encoding="utf-8") as fp:
+                fp.write("export default function Extension() { return null; }\n")
+
+            with (
+                patch("wb.homeui_backend.extensions.EXTENSION_ASSET_DIRS", (temp_dir,)),
+                patch("wb.homeui_backend.extensions._is_trusted_manifest_dir", return_value=True),
+            ):
+                response = extension_asset_handler(self.request(), self.registry())
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.body, "export default function Extension() { return null; }\n")
+        self.assertIn(["Content-type", "application/javascript"], response.headers)
+        self.assertIn(["Cache-Control", "no-cache"], response.headers)
+        self.assertIn(["X-Content-Type-Options", "nosniff"], response.headers)
+
+    def test_manifest_entry_is_fetchable(self):
+        registry = self.registry()
+        entry = json.loads(registry.public_json())[0]["entry"]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.makedirs(f"{temp_dir}/umec")
+            with open(f"{temp_dir}/umec/entry.js", "w", encoding="utf-8") as fp:
+                fp.write("export default function Extension() {}\n")
+
+            with (
+                patch("wb.homeui_backend.extensions.EXTENSION_ASSET_DIRS", (temp_dir,)),
+                patch("wb.homeui_backend.extensions._is_trusted_manifest_dir", return_value=True),
+            ):
+                response = extension_asset_handler(self.request(entry), registry)
+
+        self.assertEqual(response.status, 200)
+
+    def test_missing_registered_entry_returns_404(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with (
+                patch("wb.homeui_backend.extensions.EXTENSION_ASSET_DIRS", (temp_dir,)),
+                patch("wb.homeui_backend.extensions._is_trusted_manifest_dir", return_value=True),
+            ):
+                response = extension_asset_handler(self.request(), self.registry())
+
+        self.assertEqual(response, response_404())
+
+    def test_traversal_is_rejected(self):
+        response = extension_asset_handler(
+            self.request("/extensions/umec/%2E%2E/secret.js"), self.registry()
+        )
+        self.assertEqual(response, response_404())
+
+    def test_url_request_target_is_rejected(self):
+        response = extension_asset_handler(
+            self.request("https://example.test/extensions/umec/entry.js"), self.registry()
+        )
+        self.assertEqual(response, response_404())
+
+    def test_existing_undeclared_asset_is_not_exposed(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.makedirs(f"{temp_dir}/umec")
+            with open(f"{temp_dir}/umec/secret.js", "w", encoding="utf-8") as fp:
+                fp.write("secret")
+
+            with (
+                patch("wb.homeui_backend.extensions.EXTENSION_ASSET_DIRS", (temp_dir,)),
+                patch("wb.homeui_backend.extensions._is_trusted_manifest_dir", return_value=True),
+            ):
+                response = extension_asset_handler(
+                    self.request("/extensions/umec/secret.js"), self.registry()
+                )
+
+        self.assertEqual(response, response_404())
+
+    def test_symlink_escape_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp_dir, tempfile.TemporaryDirectory() as secret_dir:
+            os.symlink(secret_dir, f"{temp_dir}/umec")
+            with open(f"{secret_dir}/entry.js", "w", encoding="utf-8") as fp:
+                fp.write("secret")
+
+            with (
+                patch("wb.homeui_backend.extensions.EXTENSION_ASSET_DIRS", (temp_dir,)),
+                patch("wb.homeui_backend.extensions._is_trusted_manifest_dir", return_value=True),
+            ):
+                response = extension_asset_handler(self.request(), self.registry())
+
+        self.assertEqual(response, response_404())
 
 
 class ExtensionProxyGuardTest(unittest.TestCase):

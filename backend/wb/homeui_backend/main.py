@@ -43,6 +43,7 @@ from .http_response import (
 )
 from .extensions import (
     ExtensionRegistry,
+    extension_asset_handler,
     extension_proxy_handler,
     extensions_manifest_handler,
 )
@@ -680,6 +681,12 @@ def extensions_api_handler(
     )
 
 
+def extensions_asset_handler(
+    request: BaseHTTPRequestHandler, context: WebRequestHandlerContext
+) -> HttpResponse:
+    return extension_asset_handler(request, context.extension_registry or ExtensionRegistry(()))
+
+
 def custom_menu_handler(_request: BaseHTTPRequestHandler, _context: WebRequestHandlerContext) -> HttpResponse:
     menu_items = []
     for menu_dir in CUSTOM_MENU_DIRS:
@@ -793,6 +800,7 @@ class WebRequestHandler(BaseHTTPRequestHandler):
                 "/api/dashboards/*/svg": RequestHandler(fn=get_dashboard_svg_handler),
                 "/api/extensions": RequestHandler(fn=extensions_handler),
                 "/api/extensions/*/**": RequestHandler(fn=extensions_api_handler),
+                "/extensions/*/**": RequestHandler(fn=extensions_asset_handler),
                 "/ui/menu": RequestHandler(fn=custom_menu_handler),
             }
         )

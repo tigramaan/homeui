@@ -44,6 +44,15 @@ Fields:
 
 Duplicate ids or routes are skipped. Malformed manifests are skipped and logged.
 
+Install the corresponding module asset under a package-owned directory matching the manifest
+entry path:
+
+- `/usr/share/wb-mqtt-homeui/extensions/<id>/entry.js`
+- `/usr/lib/wb-mqtt-homeui/extensions/<id>/entry.js`
+
+HomeUI serves only registered manifest entry assets from these trusted directories. Missing
+files, undeclared assets, URL-like entries, and traversal attempts return 404.
+
 ## Frontend Module API
 
 The `entry` module must export a default React component:

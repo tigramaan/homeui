@@ -26,6 +26,10 @@ EXTENSION_MANIFEST_DIRS = (
     "/usr/share/wb-mqtt-homeui/extensions.d",
     "/usr/lib/wb-mqtt-homeui/extensions.d",
 )
+EXTENSION_ASSET_DIRS = (
+    "/usr/share/wb-mqtt-homeui/extensions",
+    "/usr/lib/wb-mqtt-homeui/extensions",
+)
 
 EXTENSION_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,63}$")
 EXTENSION_ROUTE_RE = re.compile(r"^integrations/[a-z0-9][a-z0-9._/-]{0,126}$")
@@ -109,6 +113,12 @@ class ExtensionRegistry:
 
     def get(self, extension_id: str) -> Optional[ExtensionManifest]:
         return self._by_id.get(extension_id)
+
+    def get_by_entry(self, entry: str) -> Optional[ExtensionManifest]:
+        for manifest in self._by_id.values():
+            if manifest.entry == entry:
+                return manifest
+        return None
 
     def public_json(self) -> str:
         return json.dumps(self._public, ensure_ascii=False)
@@ -204,6 +214,60 @@ def extensions_manifest_handler(
     _request: BaseHTTPRequestHandler, registry: ExtensionRegistry
 ) -> HttpResponse:
     return response_200([["Content-type", "application/json"]], registry.public_json())
+
+
+def extension_asset_handler(
+    request: BaseHTTPRequestHandler, registry: ExtensionRegistry
+) -> HttpResponse:
+    if "://" in request.path:
+        return response_404()
+    entry = urlparse(request.path).path
+    if not _is_safe_extension_entry_path(entry):
+        return response_404()
+    if registry.get_by_entry(entry) is None:
+        return response_404()
+    asset_path = _find_extension_asset(entry)
+    if asset_path is None:
+        return response_404()
+    try:
+        with open(asset_path, "r", encoding="utf-8") as fp:
+            body = fp.read()
+    except (OSError, UnicodeDecodeError):
+        logging.warning("Failed to read extension asset %s", asset_path, exc_info=True)
+        return response_404()
+    return response_200(
+        [
+            ["Content-type", _extension_asset_content_type(entry)],
+            ["Cache-Control", "no-cache"],
+            ["X-Content-Type-Options", "nosniff"],
+        ],
+        body,
+    )
+
+
+def _is_safe_extension_entry_path(path: str) -> bool:
+    return EXTENSION_ENTRY_RE.fullmatch(path) is not None and ".." not in path.split("/")
+
+
+def _find_extension_asset(entry: str) -> Optional[str]:
+    relative_path = entry.removeprefix("/extensions/")
+    for asset_dir in EXTENSION_ASSET_DIRS:
+        if not _is_trusted_manifest_dir(asset_dir):
+            logging.warning("Skipping untrusted extension asset directory %s", asset_dir)
+            continue
+        base_dir = os.path.realpath(asset_dir)
+        candidate = os.path.realpath(os.path.join(base_dir, relative_path))
+        if not candidate.startswith(base_dir + os.sep):
+            continue
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def _extension_asset_content_type(entry: str) -> str:
+    if entry.endswith(".mjs"):
+        return "text/javascript"
+    return "application/javascript"
 
 
 # pylint: disable-next=too-many-return-statements

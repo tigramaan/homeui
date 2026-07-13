@@ -1,3 +1,10 @@
+wb-mqtt-homeui (2.238.3) stable; urgency=medium
+
+  * Serve registered HomeUI extension entry modules from trusted package asset
+    directories via same-origin /extensions/<id>/entry.js
+
+ -- Codex <codex@openai.com>  Mon, 13 Jul 2026 14:12:53 +0000
+
 wb-mqtt-homeui (2.238.2) stable; urgency=medium
 
   * Break old libwbmqtt1-5 versions incompatible with the wb-mqtt-serial
