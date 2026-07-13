@@ -1,0 +1,50 @@
+#!/bin/sh
+set -eu
+
+REQUIRED_BREAK='libwbmqtt1-5 (<< 5.6.0-wb102)'
+FORBIDDEN_DEPENDS='libwbmqtt1-5'
+
+if [ -z "${DEBIAN_CONTROL:-}" ] && breaks=$(dpkg-query -W -f='${Breaks}\n' wb-mqtt-homeui 2>/dev/null); then
+    depends=$(dpkg-query -W -f='${Depends}\n' wb-mqtt-homeui)
+else
+    control=${DEBIAN_CONTROL:-debian/control}
+    breaks=$(
+        awk '
+            /^Package:[[:space:]]*wb-mqtt-homeui[[:space:]]*$/ { pkg = 1; next }
+            /^Package:/ && pkg { exit }
+            pkg && /^[A-Za-z0-9-]+:/ { field = $1; sub(":", "", field) }
+            pkg && field == "Breaks" {
+                line = $0
+                sub(/^[^:]+:[[:space:]]*/, "", line)
+                print line
+                next
+            }
+            pkg && /^[[:space:]]/ && field == "Breaks" {
+                line = $0
+                sub(/^[[:space:]]*/, "", line)
+                print line
+            }
+        ' "$control"
+    )
+    depends=$(
+        awk '
+            /^Package:[[:space:]]*wb-mqtt-homeui[[:space:]]*$/ { pkg = 1; next }
+            /^Package:/ && pkg { exit }
+            pkg && /^[A-Za-z0-9-]+:/ { field = $1; sub(":", "", field) }
+            pkg && field == "Depends" {
+                line = $0
+                sub(/^[^:]+:[[:space:]]*/, "", line)
+                print line
+                next
+            }
+            pkg && /^[[:space:]]/ && field == "Depends" {
+                line = $0
+                sub(/^[[:space:]]*/, "", line)
+                print line
+            }
+        ' "$control"
+    )
+fi
+
+printf '%s\n' "$breaks" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -Fx "$REQUIRED_BREAK"
+! printf '%s\n' "$depends" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -F "$FORBIDDEN_DEPENDS"

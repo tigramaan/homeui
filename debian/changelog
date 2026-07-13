@@ -1,3 +1,10 @@
+wb-mqtt-homeui (2.238.2) stable; urgency=medium
+
+  * Break old libwbmqtt1-5 versions incompatible with the wb-mqtt-serial
+    upgrade path required by HomeUI on WB8/Bullseye
+
+ -- Codex <codex@openai.com>  Mon, 13 Jul 2026 13:41:17 +0000
+
 wb-mqtt-homeui (2.238.1) stable; urgency=medium
 
   * Drop python3-legacy-cgi dependency for Bullseye, where cgi.FieldStorage

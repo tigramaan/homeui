@@ -1,0 +1,3 @@
+Tests: packaging-contract
+Depends: @, dpkg-dev
+Restrictions: superficial
