@@ -1,3 +1,10 @@
+wb-mqtt-homeui (2.238.1) stable; urgency=medium
+
+  * Drop python3-legacy-cgi dependency for Bullseye, where cgi.FieldStorage
+    is provided by the supported Python 3.9 standard library
+
+ -- Codex <codex@openai.com>  Mon, 13 Jul 2026 00:00:00 +0000
+
 wb-mqtt-homeui (2.238.0) stable; urgency=medium
 
   * Custom menu: read drop-ins from three per-origin dirs (package
