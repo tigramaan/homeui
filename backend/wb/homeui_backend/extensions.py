@@ -38,6 +38,7 @@ ALLOWLIST_PATH_RE = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$")
 MAX_REQUEST_BODY = 1024 * 1024
 MAX_RESPONSE_BODY = 2 * 1024 * 1024
 PROXY_TIMEOUT_SECONDS = 5
+EXTENSION_CONTRACT_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -62,6 +63,7 @@ class ExtensionManifest:
     socket: str
     api: tuple[ExtensionAllowlistRule, ...]
     minimum_write_role: UserType
+    contract_version: int
 
     def public_dict(self) -> dict:
         return {
@@ -70,6 +72,7 @@ class ExtensionManifest:
             "title": self.title,
             "entry": self.entry,
             "minimumWriteRole": self.minimum_write_role.value,
+            "contractVersion": self.contract_version,
         }
 
 
@@ -158,6 +161,9 @@ def validate_manifest(data: object) -> ExtensionManifest:
     if not unix_socket.startswith("/") or "://" in unix_socket or ".." in unix_socket.split("/"):
         raise ValueError("socket must be an absolute Unix socket path")
     minimum_write_role = UserType(data.get("minimum_write_role", UserType.ADMIN.value))
+    contract_version = data.get("contract_version")
+    if contract_version != EXTENSION_CONTRACT_VERSION:
+        raise ValueError(f"contract_version must be {EXTENSION_CONTRACT_VERSION}")
     api_data = data.get("api")
     if not isinstance(api_data, list) or not api_data:
         raise TypeError("api must be a non-empty list")
@@ -169,6 +175,7 @@ def validate_manifest(data: object) -> ExtensionManifest:
         socket=unix_socket,
         api=tuple(_validate_allowlist_rule(rule) for rule in api_data),
         minimum_write_role=minimum_write_role,
+        contract_version=contract_version,
     )
 
 
@@ -285,7 +292,7 @@ def extension_proxy_handler(
         return response_404()
     if not any(rule.matches(request.command, proxied_path) for rule in manifest.api):
         return response_403()
-    role = _request_role(request, session, users_configured)
+    role = _request_role(session)
     if role is None:
         return response_401()
     if request.command != "GET" and not _role_allows(role, manifest.minimum_write_role):
@@ -296,21 +303,9 @@ def extension_proxy_handler(
     return _proxy_to_socket(request, manifest, proxied_path, body, role)
 
 
-def _request_role(
-    request: BaseHTTPRequestHandler, session: Optional[Session], users_configured: bool
-) -> Optional[UserType]:
-    header_role = request.headers.get("Wb-User-Type")
-    if header_role:
-        try:
-            return UserType(header_role)
-        except ValueError:
-            return None
+def _request_role(session: Optional[Session]) -> Optional[UserType]:
     if session is not None:
         return session.user.type
-    if not users_configured:
-        # Compatibility boundary for legacy deployments where nginx HTTP auth has already
-        # authenticated the request but HomeUI has no role-bearing session database.
-        return UserType.ADMIN
     return None
 
 
@@ -378,6 +373,7 @@ def _proxy_headers(
         "Content-Length": str(content_length),
         "X-Homeui-Extension-Id": extension_id,
         "X-Homeui-User-Role": role.value,
+        "X-Homeui-Extension-Contract": str(EXTENSION_CONTRACT_VERSION),
     }
     content_type = request.headers.get("Content-Type")
     if content_type:

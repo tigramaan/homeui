@@ -67,12 +67,12 @@ describe('AuthStore', () => {
       expect(store.isAutologin).toBe(false);
     });
 
-    test('sets admin role on 404', async () => {
+    test('fails closed on 404', async () => {
       requestMock.get.mockRejectedValue({ status: 404 });
 
       await expect(store.checkAuth()).rejects.toEqual({ status: 404 });
-      expect(store.userRole).toBe(UserRole.Admin);
-      expect(store.areUsersConfigured).toBe(false);
+      expect(store.userRole).toBeUndefined();
+      expect(store.areUsersConfigured).toBe(true);
     });
 
     test('clears userRole on other errors', async () => {

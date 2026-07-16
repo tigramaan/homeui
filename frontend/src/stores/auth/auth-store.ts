@@ -25,13 +25,7 @@ export default class AuthStore {
       });
     } catch (err) {
       runInAction(() => {
-        // if backend is outdated and there are no users at all
-        if (err.status === 404) {
-          this.userRole = UserRole.Admin;
-          this.areUsersConfigured = false;
-        } else {
-          this.userRole = undefined;
-        }
+        this.userRole = undefined;
       });
 
       throw err;

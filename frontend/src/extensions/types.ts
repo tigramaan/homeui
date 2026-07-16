@@ -17,6 +17,7 @@ export interface ExtensionManifest {
   };
   entry: string;
   minimumWriteRole: UserRole;
+  contractVersion: 1;
 }
 
 export interface ExtensionApiClient {
@@ -34,6 +35,7 @@ export interface ExtensionModuleContext {
   theme: string;
   role: UserRole | null;
   isAdmin: boolean;
+  contractVersion: 1;
 }
 
 export type ExtensionComponent = ComponentType<ExtensionModuleContext>;

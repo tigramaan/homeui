@@ -29,6 +29,7 @@ Manifests from `/etc`, `/var`, user home directories, or network locations are i
     { "method": "POST", "path": "/config" }
   ],
   "minimum_write_role": "admin"
+  ,"contract_version": 1
 }
 ```
 
@@ -41,6 +42,7 @@ Fields:
 - `socket`: absolute Unix socket path for the local extension API. TCP and URLs are rejected.
 - `api`: allowlist of method/path pairs. A path ending with `/*` allows that local prefix.
 - `minimum_write_role`: role required for non-GET requests. Use `admin`.
+- `contract_version`: must exactly equal `1`; unknown versions are rejected.
 
 Duplicate ids or routes are skipped. Malformed manifests are skipped and logged.
 
@@ -72,6 +74,7 @@ The context is intentionally narrow:
 - `theme`: current HomeUI theme id.
 - `role`: current HomeUI role, if available.
 - `isAdmin`: convenience boolean for admin-only controls.
+- `contractVersion`: exact extension contract version (`1`).
 
 The extension module cannot register arbitrary HomeUI routes. HomeUI only mounts it at the
 manifest route.
@@ -87,13 +90,13 @@ Browser calls must use the provided `api` client or same-origin URLs below
 - requires authentication for reads;
 - requires the manifest write role for non-GET requests;
 - proxies only to the manifest Unix socket;
-- forwards sanitized `X-Homeui-Extension-Id` and `X-Homeui-User-Role` headers;
+- forwards sanitized `X-Homeui-Extension-Id`, `X-Homeui-User-Role`, and
+  `X-Homeui-Extension-Contract` headers;
 - bounds request body, response body, and socket timeout;
 - redacts socket/upstream errors.
 
 No browser bearer token, TCP proxy, arbitrary socket, or arbitrary URL access is exposed.
 
-Legacy compatibility: on systems where HomeUI users are not configured and nginx has already
-authenticated the request using legacy HTTP auth, the backend treats that request as `admin` at
-this compatibility boundary only. Role-bearing HomeUI sessions and nginx `Wb-User-Type` headers
-take precedence whenever available.
+Only the verified HomeUI session role is used; role-like request headers are ignored. Missing,
+empty, or unknown roles are rejected. HomeUI never synthesizes an administrator role, including
+on systems without configured users.

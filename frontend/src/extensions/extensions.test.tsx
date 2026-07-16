@@ -47,6 +47,7 @@ describe('HomeUI extensions frontend contract', () => {
         title: { ru: 'УМЭК', en: 'UMEC' },
         entry: '/extensions/umec/entry.js',
         minimumWriteRole: 'admin',
+        contractVersion: 1,
       }],
     });
 
@@ -89,6 +90,7 @@ describe('HomeUI extensions frontend contract', () => {
           title: { ru: 'УМЭК', en: 'UMEC' },
           entry,
           minimumWriteRole: UserRole.Admin,
+          contractVersion: 1,
         }}
       />,
     );
@@ -112,6 +114,7 @@ describe('HomeUI extensions frontend contract', () => {
           title: { ru: 'УМЭК', en: 'UMEC' },
           entry,
           minimumWriteRole: UserRole.Admin,
+          contractVersion: 1,
         }}
       />,
     );

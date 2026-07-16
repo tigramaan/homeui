@@ -15,6 +15,9 @@ export const extensionLoader = async ({ params }) => {
   if (!manifest) {
     throw new Response('', { status: 404 });
   }
+  if (manifest.contractVersion !== 1) {
+    throw new Response('', { status: 409 });
+  }
   return manifest;
 };
 
@@ -41,6 +44,7 @@ export const ExtensionHost = observer(({ manifest }: { manifest: ExtensionManife
           theme={uiStore.theme}
           role={authStore.userRole}
           isAdmin={authStore.hasRights(UserRole.Admin)}
+          contractVersion={manifest.contractVersion}
         />
       </Suspense>
     </ExtensionBoundary>

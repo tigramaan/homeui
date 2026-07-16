@@ -29,6 +29,7 @@ def manifest(**overrides):
         "socket": "/run/umec.sock",
         "api": [{"method": "GET", "path": "/status"}, {"method": "POST", "path": "/apply"}],
         "minimum_write_role": "admin",
+        "contract_version": 1,
     }
     data.update(overrides)
     return data
@@ -66,6 +67,8 @@ class ExtensionManifestValidationTest(unittest.TestCase):
             manifest(socket="http://127.0.0.1:9000"),
             manifest(api=[{"method": "GET", "path": "/../secret"}]),
             manifest(api=[{"method": "TRACE", "path": "/status"}]),
+            manifest(contract_version=2),
+            manifest(contract_version=None),
             {"id": "umec"},
         ]
         for data in bad_cases:
@@ -224,9 +227,9 @@ class ExtensionProxyGuardTest(unittest.TestCase):
 
     def test_insufficient_role_for_write_is_denied(self):
         response = extension_proxy_handler(
-            request("/api/extensions/umec/apply", method="POST", role=UserType.USER, body=b"{}"),
+            request("/api/extensions/umec/apply", method="POST", body=b"{}"),
             self.registry,
-            None,
+            session(UserType.USER),
             True,
         )
         self.assertEqual(response, response_403())
@@ -242,32 +245,31 @@ class ExtensionProxyGuardTest(unittest.TestCase):
 
     def test_oversized_body_is_rejected_before_proxy(self):
         req = request("/api/extensions/umec/apply", method="POST", role=UserType.ADMIN)
-        req.headers = {"Content-Length": str(MAX_REQUEST_BODY + 1), "Wb-User-Type": "admin"}
-        response = extension_proxy_handler(req, self.registry, None, True)
+        req.headers = {"Content-Length": str(MAX_REQUEST_BODY + 1)}
+        response = extension_proxy_handler(req, self.registry, session(UserType.ADMIN), True)
         self.assertEqual(response.status, 413)
 
-    def test_legacy_no_role_context_is_admin_when_no_homeui_users_exist(self):
+    def test_no_role_context_is_denied_even_when_no_homeui_users_exist(self):
         with patch("wb.homeui_backend.extensions.UnixSocketHTTPConnection") as connection_class:
-            connection = connection_class.return_value
-            upstream = MagicMock()
-            upstream.status = 204
-            upstream.read.return_value = b""
-            upstream.getheader.return_value = "application/json"
-            connection.getresponse.return_value = upstream
             response = extension_proxy_handler(
                 request("/api/extensions/umec/apply", method="POST", body=b"{}"),
                 self.registry,
                 None,
                 False,
             )
-        self.assertEqual(response.status, 204)
-        connection.request.assert_called_once()
-        self.assertEqual(connection.request.call_args.kwargs["headers"]["X-Homeui-User-Role"], "admin")
+        self.assertEqual(response, response_401())
+        connection_class.assert_not_called()
+
+    def test_forged_role_header_is_ignored_in_favor_of_session(self):
+        req = request("/api/extensions/umec/apply", method="POST", body=b"{}")
+        req.headers["Wb-User-Type"] = "admin"
+        response = extension_proxy_handler(req, self.registry, session(UserType.USER), True)
+        self.assertEqual(response, response_403())
 
     def test_socket_timeout_is_redacted(self):
         with patch("wb.homeui_backend.extensions.UnixSocketHTTPConnection") as connection_class:
             connection_class.return_value.request.side_effect = socket.timeout("/run/umec.sock timed out")
-            response = extension_proxy_handler(request(role=UserType.ADMIN), self.registry, None, True)
+            response = extension_proxy_handler(request(), self.registry, session(UserType.ADMIN), True)
         self.assertEqual(response.status, 502)
         self.assertNotIn("/run/umec.sock", response.body)
 
@@ -278,6 +280,6 @@ class ExtensionProxyGuardTest(unittest.TestCase):
             upstream.status = 500
             upstream.read.return_value = b"secret stack trace /run/umec.sock"
             connection.getresponse.return_value = upstream
-            response = extension_proxy_handler(request(role=UserType.ADMIN), self.registry, None, True)
+            response = extension_proxy_handler(request(), self.registry, session(UserType.ADMIN), True)
         self.assertEqual(response.status, 502)
         self.assertNotIn("secret", response.body)
