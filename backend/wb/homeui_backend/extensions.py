@@ -55,6 +55,8 @@ class ExtensionAllowlistRule:
 
 
 @dataclass(frozen=True)
+# The manifest mirrors the fixed extension contract, whose eight fields are all required.
+# pylint: disable-next=too-many-instance-attributes
 class ExtensionManifest:
     id: str
     route: str
@@ -282,7 +284,7 @@ def extension_proxy_handler(
     request: BaseHTTPRequestHandler,
     registry: ExtensionRegistry,
     session: Optional[Session],
-    users_configured: bool,
+    _users_configured: bool,
 ) -> HttpResponse:
     extension_id, proxied_path = get_extension_path(request.path)
     if extension_id is None or proxied_path is None:

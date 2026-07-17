@@ -1,4 +1,5 @@
 import { makeAutoObservable, runInAction } from 'mobx';
+import { isExtensionsCacheReady } from '@/extensions/api';
 import i18n from '@/i18n/config';
 import { authStore } from '@/stores/auth';
 import type { Dashboard } from '@/stores/dashboards';
@@ -54,18 +55,26 @@ export default class UiStore {
   async #getCustomMenuItems() {
     if (!this.#additionalItems) {
       const [additionalItems, extensionItems] = await Promise.all([getMenu(), getExtensionMenuItems()]);
-      this.#additionalItems = normalizeMenuResponse([
+      const items = normalizeMenuResponse([
         ...additionalItems,
         {
           id: 'integrations',
           children: extensionItems,
         },
       ]);
+      if (isExtensionsCacheReady()) {
+        this.#additionalItems = items;
+      }
+      return this.#updateModulesAndTranslate(items);
     }
+    return this.#updateModulesAndTranslate(this.#additionalItems);
+  }
+
+  #updateModulesAndTranslate(items: CustomMenuItem[]) {
     runInAction(() => {
-      this.modules = this.#collectModuleIds(this.#additionalItems);
+      this.modules = this.#collectModuleIds(items);
     });
-    return this.#additionalItems.map((item) => toMenuItemInstance(item, i18n.language));
+    return items.map((item) => toMenuItemInstance(item, i18n.language));
   }
 
   #collectModuleIds(items: CustomMenuItem[]): string[] {

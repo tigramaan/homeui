@@ -1,3 +1,4 @@
+import { isExtensionsCacheReady } from '@/extensions/api';
 import { getExtensionMenuItems, getMenu } from './api';
 import { normalizeMenuResponse, toMenuItemInstance, mergeMenuItems } from './menu-items';
 import UiStore from './ui-store';
@@ -11,6 +12,9 @@ vi.mock('@/stores/dashboards', () => ({ dashboardsStore: {} }));
 vi.mock('./api', () => ({
   getMenu: vi.fn(() => Promise.resolve([])),
   getExtensionMenuItems: vi.fn(() => Promise.resolve([])),
+}));
+vi.mock('@/extensions/api', () => ({
+  isExtensionsCacheReady: vi.fn(() => true),
 }));
 vi.mock('@/router/legacy-redirects', () => ({
   migrateLegacyUrl: vi.fn((url: string) => url),
@@ -35,6 +39,7 @@ describe('UiStore', () => {
     vi.clearAllMocks();
     getItemMock.mockReturnValue(null);
     vi.mocked(getExtensionMenuItems).mockResolvedValue([]);
+    vi.mocked(isExtensionsCacheReady).mockReturnValue(true);
     store = new UiStore();
   });
 
@@ -95,6 +100,25 @@ describe('UiStore', () => {
 
       expect(getMenu).toHaveBeenCalledTimes(1);
       expect(getExtensionMenuItems).toHaveBeenCalledTimes(1);
+    });
+
+    test('retries uncached extension discovery on a later menu build', async () => {
+      vi.mocked(getExtensionMenuItems)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{
+          id: 'umec',
+          url: '/integrations/umec',
+          title: { en: 'UMEC' },
+        }]);
+      vi.mocked(isExtensionsCacheReady)
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(true);
+
+      await store.buildMenu([], false, new URLSearchParams());
+      await store.buildMenu([], false, new URLSearchParams());
+
+      expect(getExtensionMenuItems).toHaveBeenCalledTimes(2);
+      expect(store.modules).toContain('umec');
     });
 
     test('collects module ids from custom items with children', async () => {

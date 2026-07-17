@@ -1,3 +1,12 @@
+wb-mqtt-homeui (2.238.4) stable; urgency=medium
+
+  * Version the trusted extension contract and fail closed when a verified
+    HomeUI session role is unavailable.
+  * Retry extension registry discovery on later navigation after a transient
+    request failure.
+
+ -- Codex <codex@openai.com>  Thu, 16 Jul 2026 23:55:00 +0000
+
 wb-mqtt-homeui (2.238.3) stable; urgency=medium
 
   * Serve registered HomeUI extension entry modules from trusted package asset
@@ -4717,9 +4726,3 @@ wb-mqtt-homeui (1.0) stable; urgency=medium
   * Initial release.
 
  -- Evgeny Boger <boger@contactless.ru>  Mon, 27 Apr 2015 17:16:00 +0300
-wb-mqtt-homeui (2.238.4) stable; urgency=medium
-
-  * Version the trusted extension contract and fail closed when a verified
-    HomeUI session role is unavailable.
-
- -- Codex <codex@openai.com>  Thu, 16 Jul 2026 23:55:00 +0000

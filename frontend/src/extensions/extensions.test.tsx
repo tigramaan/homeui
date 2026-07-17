@@ -5,6 +5,7 @@ import { routes } from '@/router/routes';
 import { authStore, UserRole } from '@/stores/auth';
 import { getExtensionMenuItems } from '@/stores/ui/api';
 import { render } from '@/test/render';
+import { resetExtensionsCache } from './api';
 import { ExtensionBoundary, ExtensionHost } from './extension-page';
 
 const mocks = vi.hoisted(() => ({
@@ -28,6 +29,7 @@ vi.mock('@/common/constants', () => ({
 describe('HomeUI extensions frontend contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetExtensionsCache();
     authStore.userRole = undefined;
   });
 
@@ -58,6 +60,26 @@ describe('HomeUI extensions frontend contract', () => {
       title: { ru: 'УМЭК', en: 'UMEC' },
       url: '/integrations/umec',
     }]);
+  });
+
+  test('retries registry discovery after a failed request and caches the later success', async () => {
+    mocks.requestGet
+      .mockRejectedValueOnce(new Error('backend restarting'))
+      .mockResolvedValueOnce({
+        data: [{
+          id: 'umec',
+          route: 'integrations/umec',
+          title: { ru: 'УМЭК', en: 'UMEC' },
+          entry: '/extensions/umec/entry.js',
+          minimumWriteRole: 'admin',
+          contractVersion: 1,
+        }],
+      });
+
+    expect(await getExtensionMenuItems()).toEqual([]);
+    expect(await getExtensionMenuItems()).toHaveLength(1);
+    expect(await getExtensionMenuItems()).toHaveLength(1);
+    expect(mocks.requestGet).toHaveBeenCalledTimes(2);
   });
 
   test('extension error boundary renders localized load error', () => {

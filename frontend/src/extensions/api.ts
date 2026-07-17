@@ -2,25 +2,33 @@ import { request } from '@/utils/request';
 import type { ExtensionApiClient, ExtensionManifest, ExtensionRequestInit } from './types';
 
 let extensionCache: ExtensionManifest[] | null = null;
+let extensionRequest: Promise<ExtensionManifest[]> | null = null;
 
 export const getExtensions = async () => {
-  if (extensionCache) {
+  if (extensionCache !== null) {
     return extensionCache;
   }
-  return request.get<ExtensionManifest[]>('/api/extensions')
+  if (extensionRequest) {
+    return extensionRequest;
+  }
+  extensionRequest = request.get<ExtensionManifest[]>('/api/extensions')
     .then(({ data }) => {
       extensionCache = Array.isArray(data) ? data : [];
       return extensionCache;
     })
-    .catch(() => {
-      extensionCache = [];
-      return extensionCache;
+    .catch(() => [])
+    .finally(() => {
+      extensionRequest = null;
     });
+  return extensionRequest;
 };
 
 export const resetExtensionsCache = () => {
   extensionCache = null;
+  extensionRequest = null;
 };
+
+export const isExtensionsCacheReady = () => extensionCache !== null;
 
 export const findExtensionByRoute = async (route: string) => {
   const extensions = await getExtensions();
