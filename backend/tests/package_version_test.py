@@ -18,7 +18,7 @@ def test_debian_source_and_binary_versions_match_extension_contract():
     ).stdout.strip()
     control = (source_root() / "debian/control").read_text(encoding="utf-8")
 
-    assert version == "2.238.4"
+    assert version == "2.238.5"
     assert "Package: wb-mqtt-homeui" in control
     assert "Package: wb-homeui-backend" in control
     assert "wb-homeui-backend (= ${binary:Version})" in control

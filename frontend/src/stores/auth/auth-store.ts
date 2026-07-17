@@ -25,7 +25,13 @@ export default class AuthStore {
       });
     } catch (err) {
       runInAction(() => {
-        this.userRole = undefined;
+        // A 404 is the backend contract for a controller with no HomeUI users yet.
+        if (err.status === 404) {
+          this.userRole = UserRole.Admin;
+          this.areUsersConfigured = false;
+        } else {
+          this.userRole = undefined;
+        }
       });
 
       throw err;
