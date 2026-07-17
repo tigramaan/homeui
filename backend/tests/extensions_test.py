@@ -4,7 +4,6 @@ import os
 import socket
 import tempfile
 import unittest
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from wb.homeui_backend.extensions import (
@@ -16,8 +15,7 @@ from wb.homeui_backend.extensions import (
     validate_manifest,
 )
 from wb.homeui_backend.http_response import response_401, response_403, response_404
-from wb.homeui_backend.sessions_storage import Session
-from wb.homeui_backend.users_storage import User, UserType
+from wb.homeui_backend.users_storage import UserType
 
 
 def manifest(**overrides):
@@ -44,10 +42,6 @@ def request(path="/api/extensions/umec/status", method="GET", role=None, body=b"
         req.headers["Wb-User-Type"] = role.value
     req.rfile = io.BytesIO(body)
     return req
-
-
-def session(role):
-    return Session("s1", User("u1", "user", "hash", role, False), datetime.now(timezone.utc))
 
 
 class ExtensionManifestValidationTest(unittest.TestCase):
@@ -208,7 +202,7 @@ class ExtensionProxyGuardTest(unittest.TestCase):
 
     def test_unknown_id_is_not_proxied(self):
         response = extension_proxy_handler(
-            request("/api/extensions/unknown/status"), self.registry, session(UserType.ADMIN), True
+            request("/api/extensions/unknown/status"), self.registry, UserType.ADMIN
         )
         self.assertEqual(response, response_404())
 
@@ -216,21 +210,19 @@ class ExtensionProxyGuardTest(unittest.TestCase):
         response = extension_proxy_handler(
             request("/api/extensions/umec/%2E%2E/other/status"),
             self.registry,
-            session(UserType.ADMIN),
-            True,
+            UserType.ADMIN,
         )
         self.assertEqual(response, response_404())
 
     def test_unauthenticated_request_is_denied(self):
-        response = extension_proxy_handler(request(), self.registry, None, True)
+        response = extension_proxy_handler(request(), self.registry, None)
         self.assertEqual(response, response_401())
 
     def test_insufficient_role_for_write_is_denied(self):
         response = extension_proxy_handler(
             request("/api/extensions/umec/apply", method="POST", body=b"{}"),
             self.registry,
-            session(UserType.USER),
-            True,
+            UserType.USER,
         )
         self.assertEqual(response, response_403())
 
@@ -239,37 +231,35 @@ class ExtensionProxyGuardTest(unittest.TestCase):
             request("/api/extensions/umec/status", method="POST", role=UserType.ADMIN, body=b"{}"),
             self.registry,
             None,
-            True,
         )
         self.assertEqual(response, response_403())
 
     def test_oversized_body_is_rejected_before_proxy(self):
         req = request("/api/extensions/umec/apply", method="POST", role=UserType.ADMIN)
         req.headers = {"Content-Length": str(MAX_REQUEST_BODY + 1)}
-        response = extension_proxy_handler(req, self.registry, session(UserType.ADMIN), True)
+        response = extension_proxy_handler(req, self.registry, UserType.ADMIN)
         self.assertEqual(response.status, 413)
 
-    def test_no_role_context_is_denied_even_when_no_homeui_users_exist(self):
+    def test_missing_resolved_role_is_denied(self):
         with patch("wb.homeui_backend.extensions.UnixSocketHTTPConnection") as connection_class:
             response = extension_proxy_handler(
                 request("/api/extensions/umec/apply", method="POST", body=b"{}"),
                 self.registry,
                 None,
-                False,
             )
         self.assertEqual(response, response_401())
         connection_class.assert_not_called()
 
-    def test_forged_role_header_is_ignored_in_favor_of_session(self):
+    def test_forged_role_header_is_ignored_in_favor_of_resolved_role(self):
         req = request("/api/extensions/umec/apply", method="POST", body=b"{}")
         req.headers["Wb-User-Type"] = "admin"
-        response = extension_proxy_handler(req, self.registry, session(UserType.USER), True)
+        response = extension_proxy_handler(req, self.registry, UserType.USER)
         self.assertEqual(response, response_403())
 
     def test_socket_timeout_is_redacted(self):
         with patch("wb.homeui_backend.extensions.UnixSocketHTTPConnection") as connection_class:
             connection_class.return_value.request.side_effect = socket.timeout("/run/umec.sock timed out")
-            response = extension_proxy_handler(request(), self.registry, session(UserType.ADMIN), True)
+            response = extension_proxy_handler(request(), self.registry, UserType.ADMIN)
         self.assertEqual(response.status, 502)
         self.assertNotIn("/run/umec.sock", response.body)
 
@@ -280,6 +270,6 @@ class ExtensionProxyGuardTest(unittest.TestCase):
             upstream.status = 500
             upstream.read.return_value = b"secret stack trace /run/umec.sock"
             connection.getresponse.return_value = upstream
-            response = extension_proxy_handler(request(), self.registry, session(UserType.ADMIN), True)
+            response = extension_proxy_handler(request(), self.registry, UserType.ADMIN)
         self.assertEqual(response.status, 502)
         self.assertNotIn("secret", response.body)

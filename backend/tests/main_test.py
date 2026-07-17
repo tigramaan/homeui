@@ -21,6 +21,7 @@ from wb.homeui_backend.main import (
     CUSTOM_MENU_DIRS,
     WebRequestHandler,
     WebRequestHandlerContext,
+    _extension_request_role,
     auth_check_handler,
     auth_who_am_i_handler,
     custom_menu_handler,
@@ -186,6 +187,48 @@ class CheckAuthHandlerTests(unittest.TestCase):
         response = auth_check_handler(self.request, self.context)
         self.assertEqual(response, response_200(headers=[["Wb-User-Type", "admin"]]))
         self.sessions_storage_mock.update_session_start_date.assert_called_once_with(self.context.session)
+
+
+class ExtensionAuthorizationContextTest(unittest.TestCase):
+    def setUp(self):
+        self.users_storage = MagicMock(spec=UsersStorage)
+        self.context = WebRequestHandlerContext(
+            sn="",
+            users_storage=self.users_storage,
+            sessions_storage=MagicMock(spec=SessionsStorage),
+            certificate_thread=MagicMock(),
+            security_check_thread=MagicMock(),
+            dashboards_store=MagicMock(),
+        )
+
+    def test_no_users_inherits_stock_administrator_context(self):
+        self.users_storage.has_users.return_value = False
+
+        self.assertEqual(_extension_request_role(self.context), UserType.ADMIN)
+        self.users_storage.get_autologin_user.assert_not_called()
+
+    def test_configured_users_without_session_are_denied(self):
+        self.users_storage.has_users.return_value = True
+        self.users_storage.get_autologin_user.return_value = None
+
+        self.assertIsNone(_extension_request_role(self.context))
+
+    def test_autologin_role_is_resolved_server_side(self):
+        self.users_storage.has_users.return_value = True
+        self.users_storage.get_autologin_user.return_value = User(
+            "1", "operator", "hash", UserType.OPERATOR, True
+        )
+
+        self.assertEqual(_extension_request_role(self.context), UserType.OPERATOR)
+
+    def test_session_role_takes_precedence(self):
+        self.context.session = Session(
+            "1", User("1", "user", "hash", UserType.USER, False), datetime.now(timezone.utc)
+        )
+
+        self.assertEqual(_extension_request_role(self.context), UserType.USER)
+        self.users_storage.has_users.assert_not_called()
+        self.users_storage.get_autologin_user.assert_not_called()
 
 
 class DashboardsAuthorizationTest(unittest.TestCase):

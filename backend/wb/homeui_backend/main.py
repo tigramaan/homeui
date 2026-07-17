@@ -670,14 +670,22 @@ def extensions_handler(_request: BaseHTTPRequestHandler, context: WebRequestHand
     return extensions_manifest_handler(_request, context.extension_registry or ExtensionRegistry(()))
 
 
+def _extension_request_role(context: WebRequestHandlerContext) -> Optional[UserType]:
+    if context.session is not None:
+        return context.session.user.type
+    if not context.users_storage.has_users():
+        return UserType.ADMIN
+    autologin_user = context.users_storage.get_autologin_user()
+    return autologin_user.type if autologin_user is not None else None
+
+
 def extensions_api_handler(
     request: BaseHTTPRequestHandler, context: WebRequestHandlerContext
 ) -> HttpResponse:
     return extension_proxy_handler(
         request,
         context.extension_registry or ExtensionRegistry(()),
-        context.session,
-        context.users_storage.has_users(),
+        _extension_request_role(context),
     )
 
 

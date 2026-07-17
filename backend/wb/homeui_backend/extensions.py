@@ -19,7 +19,6 @@ from .http_response import (
     response_403,
     response_404,
 )
-from .sessions_storage import Session
 from .users_storage import UserType
 
 EXTENSION_MANIFEST_DIRS = (
@@ -283,8 +282,7 @@ def _extension_asset_content_type(entry: str) -> str:
 def extension_proxy_handler(
     request: BaseHTTPRequestHandler,
     registry: ExtensionRegistry,
-    session: Optional[Session],
-    _users_configured: bool,
+    role: Optional[UserType],
 ) -> HttpResponse:
     extension_id, proxied_path = get_extension_path(request.path)
     if extension_id is None or proxied_path is None:
@@ -294,7 +292,6 @@ def extension_proxy_handler(
         return response_404()
     if not any(rule.matches(request.command, proxied_path) for rule in manifest.api):
         return response_403()
-    role = _request_role(session)
     if role is None:
         return response_401()
     if request.command != "GET" and not _role_allows(role, manifest.minimum_write_role):
@@ -303,13 +300,6 @@ def extension_proxy_handler(
     if error is not None:
         return error
     return _proxy_to_socket(request, manifest, proxied_path, body, role)
-
-
-def _request_role(session: Optional[Session]) -> Optional[UserType]:
-    if session is not None:
-        return session.user.type
-    return None
-
 
 def _role_allows(actual: UserType, required: UserType) -> bool:
     order = {UserType.USER: 1, UserType.OPERATOR: 2, UserType.ADMIN: 3}
